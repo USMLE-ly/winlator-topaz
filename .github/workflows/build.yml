@@ -33,12 +33,10 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          # Install CMake 3.22.1
           wget -q https://github.com/Kitware/CMake/releases/download/v3.22.1/cmake-3.22.1-linux-x86_64.tar.gz
           sudo tar xzf cmake-3.22.1-linux-x86_64.tar.gz -C /opt
           sudo ln -sf /opt/cmake-3.22.1-linux-x86_64/bin/cmake /usr/local/bin/cmake
           cmake --version
-          # Accept licenses
           yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses 2>/dev/null || true
 
       - name: Build APK
@@ -48,9 +46,17 @@ jobs:
           export ANDROID_HOME=$ANDROID_HOME
           export PATH="/usr/local/bin:$PATH"
           rm -rf app/src/main/jniLibs/
-          ./gradlew assembleDebug --no-daemon 2>&1 | tail -60
+          ./gradlew assembleDebug --no-daemon
+
+      - name: List APK files
+        run: |
+          echo "Looking for APK files..."
+          find ${{ github.workspace }}/upstream -name "*.apk" -type f 2>/dev/null
+          echo "---"
+          find ${{ github.workspace }}/upstream -name "*.apk" -type f 2>/dev/null || echo "No APK found"
 
       - uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: winlator-topaz-debug
-          path: upstream/app/app/build/outputs/apk/debug/*.apk
+          path: ${{ github.workspace }}/upstream/**/build/outputs/apk/**/*.apk
