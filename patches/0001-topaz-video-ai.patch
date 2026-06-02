@@ -1,0 +1,183 @@
+From 7705fcf3e3138967866774f4cb0a584165f35791 Mon Sep 17 00:00:00 2001
+From: Codex Agent <codex@agent.dev>
+Date: Tue, 2 Jun 2026 22:31:06 +0200
+Subject: [PATCH] Apply Topaz Video AI patches
+
+---
+ app/build.gradle                              |  2 +-
+ app/src/main/assets/box64/default.box64rc     | 34 +++++++++++++++++++
+ .../contentdialog/DXVKConfigDialog.java       | 12 +++++++
+ .../winlator/core/Win32AppWorkarounds.java    | 13 +++++++
+ .../java/com/winlator/core/WineUtils.java     | 24 +++++++++++++
+ .../GuestProgramLauncherComponent.java        |  9 +++++
+ gradlew                                       |  0
+ 7 files changed, 93 insertions(+), 1 deletion(-)
+ mode change 100644 => 100755 gradlew
+
+diff --git a/app/build.gradle b/app/build.gradle
+index 8cffc19..cc01077 100644
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -26,7 +26,7 @@ android {
+         checkReleaseBuilds false
+     }
+ 
+-    ndkVersion '24.0.8215888'
++    ndkVersion '25.2.9519653'
+ 
+     externalNativeBuild {
+         cmake {
+diff --git a/app/src/main/assets/box64/default.box64rc b/app/src/main/assets/box64/default.box64rc
+index 21fb55c..322097c 100644
+--- a/app/src/main/assets/box64/default.box64rc
++++ b/app/src/main/assets/box64/default.box64rc
+@@ -75,3 +75,37 @@ BOX64_EXIT=1
+ 
+ [*ndp462-kb*]
+ BOX64_EXIT=1
++
++# --- Topaz Video AI: maximum memory safety for AI model loading ---
++[Topaz*]
++BOX64_DYNAREC_STRONGMEM=2
++BOX64_DYNAREC_BIGBLOCK=0
++BOX64_DYNAREC_SAFEFLAGS=2
++BOX64_DYNAREC_X87DOUBLE=1
++BOX64_DYNAREC_WAIT=0
++BOX64_DYNAREC_CALLRET=0
++BOX64_DYNAREC_NATIVEFLAGS=0
++BOX64_DYNAREC_FASTNAN=0
++BOX64_DYNAREC_FASTROUND=0
++BOX64_DYNAREC_FORWARD=128
++BOX64_DYNAREC_WEAKBARRIER=0
++
++[tvai.exe]
++BOX64_DYNAREC_STRONGMEM=2
++BOX64_DYNAREC_BIGBLOCK=0
++
++# --- MSI installer stability (prevents container crash during MSI operations) ---
++[*msiexec*]
++BOX64_DYNAREC_STRONGMEM=2
++BOX64_DYNAREC_BIGBLOCK=0
++BOX64_DYNAREC_SAFEFLAGS=2
++BOX64_DYNAREC_X87DOUBLE=1
++BOX64_DYNAREC_WAIT=0
++
++[*msi*]
++BOX64_DYNAREC_STRONGMEM=2
++BOX64_DYNAREC_BIGBLOCK=0
++
++[*install*]
++BOX64_DYNAREC_STRONGMEM=2
++BOX64_DYNAREC_BIGBLOCK=0
+diff --git a/app/src/main/java/com/winlator/contentdialog/DXVKConfigDialog.java b/app/src/main/java/com/winlator/contentdialog/DXVKConfigDialog.java
+index 5ce355a..2d850b6 100644
+--- a/app/src/main/java/com/winlator/contentdialog/DXVKConfigDialog.java
++++ b/app/src/main/java/com/winlator/contentdialog/DXVKConfigDialog.java
+@@ -118,6 +118,18 @@ public class DXVKConfigDialog extends ContentDialog {
+         content += "[GTA5.exe]\n";
+         content += "dxgi.maxDeviceMemory = 512\n";
+         content += "dxgi.maxSharedMemory = 512\n";
++
++        // --- Topaz Video AI: spoof NVIDIA RTX 3060 with 4GB VRAM ---
++        content += "[Topaz*]\n";
++        content += "dxgi.customVendorId = 10de\n";
++        content += "dxgi.customDeviceId = 2504\n";
++        content += "dxgi.customDeviceDesc = \"NVIDIA GeForce RTX 3060\"\n";
++        content += "d3d11.customVendorId = 10de\n";
++        content += "d3d11.customDeviceId = 2504\n";
++        content += "d3d11.customDeviceDesc = \"NVIDIA GeForce RTX 3060\"\n";
++        content += "dxgi.maxDeviceMemory = 4096\n";
++        content += "dxgi.maxSharedMemory = 4096\n";
++        content += "d3d11.maxDeviceMemory = 4096\n";
+         return content;
+     }
+ }
+diff --git a/app/src/main/java/com/winlator/core/Win32AppWorkarounds.java b/app/src/main/java/com/winlator/core/Win32AppWorkarounds.java
+index 4ae21c4..fa81432 100644
+--- a/app/src/main/java/com/winlator/core/Win32AppWorkarounds.java
++++ b/app/src/main/java/com/winlator/core/Win32AppWorkarounds.java
+@@ -124,6 +124,19 @@ public class Win32AppWorkarounds {
+         else appIdentifier = className.toLowerCase(Locale.ENGLISH);
+ 
+         switch (appIdentifier) {
++            case "topaz*.exe":
++            case "tvai.exe":
++            case "topaz video ai apps.exe":
++                return (EnvVarsWorkaround) (envVars) -> {
++                    envVars.put("WINEDLLOVERRIDES", "directml=n,b;directmlx=n,b;d3d12=n,b;dxgi=n,b");
++                    envVars.put("MESA_GL_VERSION_OVERRIDE", "4.6");
++                    envVars.put("MESA_GLSL_VERSION_OVERRIDE", "460");
++                    envVars.put("__GL_SHADER_CACHE", "0");
++                    envVars.put("WINEESYNC", "1");
++                    envVars.put("BOX64_DYNAREC_STRONGMEM", "2");
++                    envVars.put("VKD3D_SHADER_MODEL", "6.6");
++                    envVars.put("VKD3D_CONFIG", "dxr,dxr11");
++                };
+             case "sonicgenerations.exe":
+             case "71340":
+             case "valkyria.exe":
+diff --git a/app/src/main/java/com/winlator/core/WineUtils.java b/app/src/main/java/com/winlator/core/WineUtils.java
+index d3a3a47..30964d5 100644
+--- a/app/src/main/java/com/winlator/core/WineUtils.java
++++ b/app/src/main/java/com/winlator/core/WineUtils.java
+@@ -121,6 +121,30 @@ public abstract class WineUtils {
+             registryEditor.setStringValue("Software\\Wine\\AddonsURL", null, "https://raw.githubusercontent.com/brunodev85/winlator/main/wine_addons/");
+             registryEditor.setStringValue("Software\\Wine\\Drivers", "Graphics", "x11");
+         }
++
++        // --- Spoof CPU + RAM for Topaz Video AI ---
++        try (WineRegistryEditor registryEditor = new WineRegistryEditor(systemRegFile)) {
++            registryEditor.setStringValue("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
++                "ProcessorNameString", "Intel(R) Core(TM) i7-12700K");
++            registryEditor.setDwordValue("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
++                "~MHz", 3600);
++            registryEditor.setDwordValue("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
++                "VendorIdentifier", 0x756e6547);
++            registryEditor.setDwordValue("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
++                "Identifier", 0x00000F67);
++            registryEditor.setDwordValue("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
++                "FeatureSet", 0x2C7F);
++            registryEditor.setDwordValue("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
++                "~NumberOfCores", 12);
++            registryEditor.setDwordValue("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
++                "~NumberOfLogicalProcessors", 20);
++            registryEditor.setDwordValue("HARDWARE\\DESCRIPTION\\System",
++                "TotalPhysicalMemory", 0x7FFFFFFF);
++            registryEditor.setStringValue("HARDWARE\\DESCRIPTION\\System",
++                "SystemBiosVersion", "ALASKA - 1072009");
++            registryEditor.setStringValue("HARDWARE\\DESCRIPTION\\System",
++                "SystemBiosDate", "03/10/2024");
++        }
+     }
+ 
+     public static void changeBrowsersRegistryKey(Container container, boolean useAndroidBrowser) {
+diff --git a/app/src/main/java/com/winlator/xenvironment/components/GuestProgramLauncherComponent.java b/app/src/main/java/com/winlator/xenvironment/components/GuestProgramLauncherComponent.java
+index f5e447b..2f73bf2 100644
+--- a/app/src/main/java/com/winlator/xenvironment/components/GuestProgramLauncherComponent.java
++++ b/app/src/main/java/com/winlator/xenvironment/components/GuestProgramLauncherComponent.java
+@@ -100,10 +100,19 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
+         envVars.put("BOX64_LD_LIBRARY_PATH", rootDir+"/lib/x86_64-linux-gnu");
+         envVars.put("ANDROID_SYSVSHM_SERVER", rootDir+UnixSocketConfig.SYSVSHM_SERVER_PATH);
+ 
++        // MESA/OpenGL overrides for maximum compatibility
++        envVars.put("MESA_GL_VERSION_OVERRIDE", "4.6");
++        envVars.put("MESA_GLSL_VERSION_OVERRIDE", "460");
++        envVars.put("MESA_EXTENSION_MAX_YEAR", "2020");
++        envVars.put("gallium_thread", "true");
++        envVars.put("mesa_glthread", "true");
++
+         if (this.envVars != null) envVars.putAll(this.envVars);
+ 
+         File shmDir = new File(rootDir, "/tmp/shm");
+         if (!shmDir.isDirectory()) shmDir.mkdirs();
++        // Mount a larger tmpfs for /tmp/shm to prevent ashmen OOM during MSI
++        ProcessHelper.exec("mount -t tmpfs -o size=2048M tmpfs " + shmDir.getPath());
+ 
+         String command = rootDir+"/usr/local/bin/box64 "+guestExecutable;
+ 
+diff --git a/gradlew b/gradlew
+old mode 100644
+new mode 100755
+-- 
+2.43.0
+

@@ -1,0 +1,43 @@
+name: Build Modified Winlator APK
+
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone upstream Winlator
+        run: |
+          git clone https://github.com/brunodev85/winlator.git --recursive upstream
+          cd upstream
+          git checkout 6b829aa
+
+      - name: Apply Topaz Video AI patches
+        run: |
+          cd upstream/app
+          git apply --ignore-whitespace ${{ github.workspace }}/patches/0001-topaz-video-ai.patch
+
+      - name: Copy directml.dll stub
+        run: |
+          mkdir -p upstream/app/app/src/main/assets/directml
+          cp wine_addons/directml/directml.dll upstream/app/app/src/main/assets/directml/
+
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Build APK
+        run: |
+          cd upstream/app
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: winlator-topaz-debug
+          path: upstream/app/app/build/outputs/apk/debug/*.apk
