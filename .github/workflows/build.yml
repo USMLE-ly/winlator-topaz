@@ -31,11 +31,22 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
+      - name: Install CMake 3.22.1
+        run: |
+          # Download and install CMake 3.22.1 specifically
+          wget -q https://github.com/Kitware/CMake/releases/download/v3.22.1/cmake-3.22.1-linux-x86_64.tar.gz
+          sudo tar xzf cmake-3.22.1-linux-x86_64.tar.gz -C /opt
+          echo "cmake.dir=/opt/cmake-3.22.1-linux-x86_64" > upstream/app/local.properties
+
+      - name: Accept Android SDK licenses
+        run: |
+          yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses || true
+
       - name: Build APK
         run: |
           cd upstream/app
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --no-daemon
 
       - uses: actions/upload-artifact@v4
         with:
