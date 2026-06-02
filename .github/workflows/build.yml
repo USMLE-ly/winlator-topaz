@@ -45,14 +45,13 @@ jobs:
           chmod +x gradlew
           export ANDROID_HOME=$ANDROID_HOME
           export PATH="/usr/local/bin:$PATH"
-          rm -rf app/src/main/jniLibs/
+          # Add packagingOptions to resolve duplicate .so conflicts
+          # Keep jniLibs (needed by CMake) but pickFirst when duplicates exist
+          sed -i '/^android {/a\    packagingOptions {\n        pickFirst '"'"'**/*.so'"'"'\n    }' app/build.gradle
           ./gradlew assembleDebug --no-daemon
 
       - name: List APK files
         run: |
-          echo "Looking for APK files..."
-          find ${{ github.workspace }}/upstream -name "*.apk" -type f 2>/dev/null
-          echo "---"
           find ${{ github.workspace }}/upstream -name "*.apk" -type f 2>/dev/null || echo "No APK found"
 
       - uses: actions/upload-artifact@v4
